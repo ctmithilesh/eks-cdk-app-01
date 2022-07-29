@@ -1,19 +1,43 @@
 import { Duration, Stack, StackProps } from 'aws-cdk-lib';
-import * as sns from 'aws-cdk-lib/aws-sns';
-import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as iam from 'aws-cdk-lib/aws-iam'
+import * as ec2 from 'aws-cdk-lib/aws-ec2'
+import * as eks from 'aws-cdk-lib/aws-eks'
+import * as autoscaling from 'aws-cdk-lib/aws-autoscaling'
 import { Construct } from 'constructs';
 
 export class EksCdkApp01Stack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const queue = new sqs.Queue(this, 'EksCdkApp01Queue', {
-      visibilityTimeout: Duration.seconds(300)
+    
+    const vpc = new ec2.Vpc(this, 'EKSVpc');  // Create a new VPC for our cluster
+
+     // IAM role for our EC2 worker nodes
+     const workerRole = new iam.Role(this, 'EKSWorkerRole', {
+      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com')
+    })
+
+    const eksCluster = new eks.Cluster(this, 'Cluster', {
+      vpc: vpc,
+      defaultCapacity: 0,  // we want to manage capacity our selves
+      version: eks.KubernetesVersion.V1_21,
     });
 
-    const topic = new sns.Topic(this, 'EksCdkApp01Topic');
 
-    topic.addSubscription(new subs.SqsSubscription(queue));
+    const onDemandASG = new autoscaling.AutoScalingGroup(this, 'OnDemandASG', {
+      vpc: vpc,
+      role: workerRole,
+      minCapacity: 1,
+      maxCapacity: 10,
+      instanceType: new ec2.InstanceType('t3.medium'),
+      machineImage: new eks.EksOptimizedImage({
+        kubernetesVersion: '1.21',
+        nodeType: eks.NodeType.STANDARD  // without this, incorrect SSM parameter for AMI is resolved
+      }),
+      updatePolicy: autoscaling.UpdatePolicy.rollingUpdate()
+      });
+
+      eksCluster.connectAutoScalingGroupCapacity(onDemandASG, {});
+
   }
 }
