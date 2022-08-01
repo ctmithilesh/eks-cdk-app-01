@@ -21,8 +21,14 @@ export class EksCdkApp01Stack extends Stack {
       vpc: vpc,
       defaultCapacity: 0,  // we want to manage capacity our selves
       version: eks.KubernetesVersion.V1_21,
+      clusterLogging:[
+        eks.ClusterLoggingTypes.API,
+        eks.ClusterLoggingTypes.AUTHENTICATOR,
+        eks.ClusterLoggingTypes.SCHEDULER
+      ]
     });
 
+    
 
     const onDemandASG = new autoscaling.AutoScalingGroup(this, 'OnDemandASG', {
       vpc: vpc,
